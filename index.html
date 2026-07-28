@@ -3,10 +3,10 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Aplikasi Resepsionis - Scan</title>
+    <title>Aplikasi Resepsionis - Multi Scan (KTP/SIM/Kartu Pelajar)</title>
     <!-- Tailwind CSS CDN -->
     <script src="https://cdn.tailwindcss.com"></script>
-    <!-- Tesseract.js CDN untuk OCR di browser -->
+    <!-- Tesseract.js CDN untuk OCR -->
     <script src='https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js'></script>
 </head>
 <body class="bg-gray-100 min-h-screen flex flex-col items-center justify-center p-4">
@@ -14,17 +14,17 @@
     <div class="w-full max-w-xl bg-white rounded-xl shadow-lg p-6 md:p-8">
         
         <h1 class="text-2xl font-bold text-center text-gray-800 mb-1">Resepsionis Check-In / Out</h1>
-        <p class="text-center text-gray-500 text-sm mb-6">Sistem Pendataan Tamu</p>
+        <p class="text-center text-gray-500 text-sm mb-6">Sistem Pendataan Tamu Berbasis Kamera & OCR</p>
 
         <!-- Tombol Pilihan Mode -->
         <div class="flex bg-gray-200 p-1 rounded-lg mb-6">
             <button type="button" id="btnCheckin" onclick="switchMode('checkin')" 
                 class="flex-1 py-2 rounded-md font-semibold text-sm transition bg-blue-600 text-white shadow">
-                Check-In (Masuk)
+                Mode Check-In (Masuk)
             </button>
             <button type="button" id="btnCheckout" onclick="switchMode('checkout')" 
                 class="flex-1 py-2 rounded-md font-semibold text-sm transition text-gray-600">
-                Check-Out (Keluar)
+                Mode Check-Out (Keluar)
             </button>
         </div>
 
@@ -34,19 +34,51 @@
         <!-- Form Utama -->
         <form id="receptionForm" onsubmit="handleSubmit(event)" class="space-y-4">
             
-            <!-- Bagian Upload / Scan KTP -->
-            <div class="border-2 border-dashed border-gray-300 rounded-lg p-4 text-center bg-gray-50">
-                <label id="labelScan" class="block text-sm font-medium text-gray-700 mb-2">
-                    Upload / Scan KTP Tamu (Masuk)
-                </label>
-                <input type="file" id="fileKtp" accept="image/*" onchange="processOCR(this)" 
-                    class="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 cursor-pointer"/>
+            <!-- Pilihan Jenis Identitas (Khusus Check-In) -->
+            <div id="idTypeContainer">
+                <label class="block text-sm font-medium text-gray-700 mb-1">Jenis Kartu Pengenal</label>
+                <select id="idType" class="mt-1 block w-full rounded-md border border-gray-300 p-2 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-sm">
+                    <option value="KTP">KTP (NIK 16 Digit)</option>
+                    <option value="SIM">SIM (Nomor SIM 12 Digit)</option>
+                    <option value="PELAJAR">Kartu Pelajar / Mahasiswa</option>
+                </select>
             </div>
 
-            <!-- Input NIK -->
+            <!-- Bagian Kamera Langsung -->
+            <div class="border-2 border-gray-300 rounded-lg p-4 text-center bg-gray-50">
+                <label class="block text-sm font-medium text-gray-700 mb-2">Ambil Foto Kartu Pengenal via Kamera</label>
+                
+                <!-- Tampilan Video Live Kamera -->
+                <div id="cameraContainer" class="relative w-full bg-black rounded-lg overflow-hidden mb-2 hidden flex justify-center items-center">
+                    <video id="videoElement" autoplay playsinline class="w-full h-48 object-cover"></video>
+                </div>
+
+                <!-- Hasil Tangkapan Kamera (Canvas tersembunyi) -->
+                <canvas id="canvasElement" class="hidden"></canvas>
+
+                <!-- Pratinjau Foto Hasil Jepretan -->
+                <div id="previewContainer" class="mb-3 hidden">
+                    <img id="imagePreview" class="mx-auto h-40 object-contain rounded border border-gray-300" alt="Pratinjau Kartu"/>
+                </div>
+
+                <!-- Tombol Kontrol Kamera -->
+                <div class="flex gap-2 justify-center">
+                    <button type="button" id="startCamBtn" onclick="startCamera()" class="px-4 py-2 bg-gray-700 text-white text-xs font-semibold rounded hover:bg-gray-800 transition">
+                        Buka Kamera
+                    </button>
+                    <button type="button" id="captureBtn" onclick="capturePhoto()" class="px-4 py-2 bg-green-600 text-white text-xs font-semibold rounded hover:bg-green-700 transition hidden">
+                        Jepret Foto
+                    </button>
+                    <button type="button" id="retakeBtn" onclick="resetCamera()" class="px-4 py-2 bg-yellow-600 text-white text-xs font-semibold rounded hover:bg-yellow-700 transition hidden">
+                        Ulangi Foto
+                    </button>
+                </div>
+            </div>
+
+            <!-- Input Nomor Identitas -->
             <div>
-                <label class="block text-sm font-medium text-gray-700">NIK (Hasil Scan / Edit Manual jika Perlu)</label>
-                <input type="text" id="nik" required placeholder="Nomor NIK akan otomatis muncul..."
+                <label id="labelNoId" class="block text-sm font-medium text-gray-700">Nomor NIK / Identitas (Hasil Scan / Ketik Manual)</label>
+                <input type="text" id="nik" required placeholder="Nomor akan otomatis muncul..."
                     class="mt-1 block w-full rounded-md border border-gray-300 p-2 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-sm"/>
             </div>
 
@@ -54,7 +86,7 @@
             <div id="checkinFields" class="space-y-4">
                 <div>
                     <label class="block text-sm font-medium text-gray-700">Nama Lengkap</label>
-                    <input type="text" id="nama" placeholder="Nama sesuai KTP"
+                    <input type="text" id="nama" placeholder="Nama sesuai kartu pengenal"
                         class="mt-1 block w-full rounded-md border border-gray-300 p-2 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-sm"/>
                 </div>
 
@@ -65,8 +97,8 @@
                 </div>
 
                 <div>
-                    <label class="block text-sm font-medium text-gray-700">Alamat</label>
-                    <input type="text" id="alamat" placeholder="Kota / Kecamatan"
+                    <label class="block text-sm font-medium text-gray-700">Alamat / Instansi / Asal Sekolah</label>
+                    <input type="text" id="alamat" placeholder="Kota / Nama Sekolah / Kampus"
                         class="mt-1 block w-full rounded-md border border-gray-300 p-2 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-sm"/>
                 </div>
 
@@ -87,88 +119,158 @@
 
     </div>
 
-    <!-- Skrip Logika Tesseract.js & Google Apps Script -->
+    <!-- Skrip Kamera, OCR, & Google Apps Script -->
     <script>
         // ⚠️ Ganti dengan URL Web App Google Apps Script kamu!
         const SCRIPT_URL = "https://script.googleusercontent.com/macros/echo?user_content_key=AUkAhnS5dGduhyEaGVCygRWKo9oSfrVa7setfs8qoao-vZ_ODBVsNRhuNx88GOPYuwBFLSuZqTtNFlCniD0q-9pkrKlts18NgwFdDpj2MG9jbHtHAu1dwHkz9jPX6PndbJxodyq3tAX1D1HOSV991kZsDk6ra-rU0UBI0vaklUXdwfQhtdkRWgPHqLmFQJ9bpKQSvHof8ShFpPpjr_hCZQDxa2lfmUxYscmzXErA6DFQUSGD7rZTpD_c-vvlTC7t9KXmjmX3jsQ_rrAUAlnhkcI5ZIJPGd21SQ&lib=MBNIcXTvPE8GSR91brAW9-xz2aiC72MHv";
 
         let currentMode = 'checkin';
+        let mediaStream = null;
 
         function switchMode(mode) {
             currentMode = mode;
             const btnCheckin = document.getElementById('btnCheckin');
             const btnCheckout = document.getElementById('btnCheckout');
             const checkinFields = document.getElementById('checkinFields');
+            const idTypeContainer = document.getElementById('idTypeContainer');
             const submitBtn = document.getElementById('submitBtn');
-            const labelScan = document.getElementById('labelScan');
             
             hideAlert();
             clearForm();
+            stopCamera();
 
             if (mode === 'checkin') {
                 btnCheckin.className = "flex-1 py-2 rounded-md font-semibold text-sm transition bg-blue-600 text-white shadow";
                 btnCheckout.className = "flex-1 py-2 rounded-md font-semibold text-sm transition text-gray-600";
                 checkinFields.style.display = "block";
+                idTypeContainer.style.display = "block";
                 document.getElementById('nama').required = true;
                 document.getElementById('noHp').required = true;
                 submitBtn.innerText = "Simpan & Check-In";
                 submitBtn.className = "w-full py-3 px-4 rounded-md text-white font-semibold shadow transition bg-blue-600 hover:bg-blue-700 text-sm";
-                labelScan.innerText = "Upload / Scan KTP Tamu (Masuk)";
             } else {
                 btnCheckout.className = "flex-1 py-2 rounded-md font-semibold text-sm transition bg-red-600 text-white shadow";
                 btnCheckin.className = "flex-1 py-2 rounded-md font-semibold text-sm transition text-gray-600";
                 checkinFields.style.display = "none";
+                idTypeContainer.style.display = "none";
                 document.getElementById('nama').required = false;
                 document.getElementById('noHp').required = false;
                 submitBtn.innerText = "Proses Check-Out";
                 submitBtn.className = "w-full py-3 px-4 rounded-md text-white font-semibold shadow transition bg-red-600 hover:bg-red-700 text-sm";
-                labelScan.innerText = "Scan KTP Tamu untuk Check-Out";
             }
         }
 
-        // Fungsi OCR Asli menggunakan Tesseract.js
-        async function processOCR(input) {
-            if (input.files && input.files[0]) {
-                const file = input.files[0];
-                showAlert("Sedang memindai KTP dengan OCR (Mohon tunggu beberapa detik)...", "info");
+        // Fungsi Menyalakan Kamera Perangkat
+        async function startCamera() {
+            const video = document.getElementById('videoElement');
+            const cameraContainer = document.getElementById('cameraContainer');
+            const startCamBtn = document.getElementById('startCamBtn');
+            const captureBtn = document.getElementById('captureBtn');
+            const previewContainer = document.getElementById('previewContainer');
 
-                try {
-                    // Menjalankan Tesseract untuk bahasa Indonesia ('ind')
-                    const { data: { text } } = await Tesseract.recognize(
-                        file,
-                        'ind',
-                        { logger: m => console.log(m) } // Bisa dilihat di console browser untuk memantau progress
-                    );
+            try {
+                previewContainer.classList.add('hidden');
+                cameraContainer.classList.remove('hidden');
+                
+                mediaStream = await navigator.mediaDevices.getUserMedia({ 
+                    video: { facingMode: "environment" }, // Prioritaskan kamera belakang jika di HP/Tablet
+                    audio: false 
+                });
+                video.srcObject = mediaStream;
+                
+                startCamBtn.classList.add('hidden');
+                captureBtn.classList.remove('hidden');
+            } catch (error) {
+                console.error("Gagal mengakses kamera:", error);
+                showAlert("Tidak dapat mengakses kamera. Pastikan izin kamera diizinkan pada browser.", "error");
+            }
+        }
 
-                    console.log("Hasil OCR:", text);
+        // Fungsi Mengambil Foto dari Kamera
+        function capturePhoto() {
+            const video = document.getElementById('videoElement');
+            const canvas = document.getElementById('canvasElement');
+            const cameraContainer = document.getElementById('cameraContainer');
+            const previewContainer = document.getElementById('previewContainer');
+            const imagePreview = document.getElementById('imagePreview');
+            const captureBtn = document.getElementById('captureBtn');
+            const retakeBtn = document.getElementById('retakeBtn');
 
-                    // Mencari pola angka 16 digit yang biasanya adalah NIK
-                    const nikMatch = text.match(/\d{16}/);
-                    if (nikMatch) {
-                        document.getElementById('nik').value = nikMatch[0];
-                    } else {
-                        // Jika tidak ketemu persis 16 digit, ambil deretan angka terpanjang atau kosongkan agar diketik manual
-                        const numbersOnly = text.replace(/[^0-9]/g, '');
-                        if (numbersOnly.length >= 10) {
-                            document.getElementById('nik').value = numbersOnly.substring(0, 16);
-                        } else {
-                            document.getElementById('nik').value = "";
-                            alert("NIK tidak terdeteksi secara otomatis. Silakan ketik NIK secara manual.");
-                        }
+            canvas.width = video.videoWidth || 640;
+            canvas.height = video.videoHeight || 480;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+            const imageDataUrl = canvas.toDataURL('image/jpeg');
+            imagePreview.src = imageDataUrl;
+
+            cameraContainer.classList.add('hidden');
+            previewContainer.classList.remove('hidden');
+            captureBtn.classList.add('hidden');
+            retakeBtn.classList.remove('hidden');
+
+            stopCamera();
+            processOCR(canvas.toDataURL());
+        }
+
+        // Fungsi Mematikan Aliran Kamera
+        function stopCamera() {
+            if (mediaStream) {
+                mediaStream.getTracks().forEach(track => track.stop());
+                mediaStream = null;
+            }
+        }
+
+        // Fungsi Reset / Ulangi Foto
+        function resetCamera() {
+            document.getElementById('previewContainer').classList.add('hidden');
+            document.getElementById('retakeBtn').classList.add('hidden');
+            document.getElementById('startCamBtn').classList.remove('hidden');
+            document.getElementById('nik').value = "";
+        }
+
+        // Fungsi OCR Cerdas Berdasarkan Jenis Kartu
+        async function processOCR(imageSource) {
+            showAlert("Memindai kartu pengenal dengan OCR (Mohon tunggu)...", "info");
+            const idType = document.getElementById('idType') ? document.getElementById('idType').value : 'KTP';
+
+            try {
+                const { data: { text } } = await Tesseract.recognize(imageSource, 'ind', {
+                    logger: m => console.log(m)
+                });
+
+                console.log("Hasil OCR:", text);
+                let detectedNumber = "";
+
+                if (idType === 'KTP') {
+                    // Cari pola 16 digit angka (KTP)
+                    const match = text.match(/\d{16}/);
+                    if (match) detectedNumber = match[0];
+                } else if (idType === 'SIM') {
+                    // Cari pola nomor SIM (biasanya 12 digit atau ada kombinasi angka)
+                    const match = text.match(/\d{10,14}/);
+                    if (match) detectedNumber = match[0];
+                } else {
+                    // Kartu Pelajar (Ambil deretan angka bebas terpanjang yang ditemukan)
+                    const numbersOnly = text.replace(/[^0-9]/g, '');
+                    if (numbersOnly.length >= 5) {
+                        detectedNumber = numbersOnly.substring(0, 16);
                     }
-
-                    // Opsional: Mencoba membaca baris pertama setelah teks 'Nama' jika memungkinkan
-                    // Karena struktur KTP beragam, kolom nama/alamat disarankan tetap diketik atau dikoreksi manual oleh resepsionis jika meleset.
-
-                    showAlert("Pemindaian KTP selesai! Periksa kembali data di form.", "success");
-                } catch (error) {
-                    console.error("OCR Error:", error);
-                    showAlert("Gagal membaca gambar KTP. Silakan masukkan data manual.", "error");
                 }
+
+                if (detectedNumber) {
+                    document.getElementById('nik').value = detectedNumber;
+                    showAlert("Nomor identitas berhasil terdeteksi!", "success");
+                } else {
+                    showAlert("Nomor tidak terbaca otomatis. Silakan ketik manual.", "error");
+                }
+            } catch (error) {
+                console.error("OCR Error:", error);
+                showAlert("Gagal memproses gambar. Silakan masukkan nomor secara manual.", "error");
             }
         }
 
-        // Fungsi Kirim Data ke Google Sheets (Apps Script)
+        // Fungsi Kirim Data ke Google Sheets
         async function handleSubmit(event) {
             event.preventDefault();
             const submitBtn = document.getElementById('submitBtn');
@@ -176,13 +278,14 @@
             submitBtn.innerText = "Memproses...";
 
             let payload = {};
+            const idType = document.getElementById('idType') ? document.getElementById('idType').value : 'KTP';
 
             if (currentMode === 'checkin') {
                 const currentTime = new Date().toLocaleTimeString();
                 payload = {
                     action: "checkin",
                     waktuCheckIn: currentTime,
-                    nik: document.getElementById('nik').value,
+                    nik: `[${idType}] ` + document.getElementById('nik').value, // Menandai jenis kartu di data
                     nama: document.getElementById('nama').value,
                     noHp: document.getElementById('noHp').value,
                     alamat: document.getElementById('alamat').value,
@@ -206,9 +309,10 @@
                 if (currentMode === 'checkin') {
                     showAlert("Check-in berhasil disimpan ke Google Sheets!", "success");
                 } else {
-                    showAlert(`Check-out berhasil dicatat untuk NIK: ${payload.nik}`, "success");
+                    showAlert(`Check-out berhasil dicatat!`, "success");
                 }
                 clearForm();
+                resetCamera();
             } catch (error) {
                 console.error("Error:", error);
                 showAlert("Terjadi kesalahan jaringan saat menyimpan data.", "error");
@@ -232,8 +336,7 @@
         }
 
         function hideAlert() {
-            const alertBox = document.getElementById('alertBox');
-            alertBox.classList.add('hidden');
+            document.getElementById('alertBox').classList.add('hidden');
         }
 
         function clearForm() {
