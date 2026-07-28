@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Aplikasi Resepsionis - OCR Cerdas (Tesseract.js)</title>
     <!-- Tailwind CSS CDN -->
-    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.js"></script>
     <!-- Tesseract.js CDN -->
     <script src='https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js'></script>
 </head>
@@ -20,11 +20,11 @@
         <div class="flex bg-gray-200 p-1 rounded-lg mb-6">
             <button type="button" id="btnCheckin" onclick="switchMode('checkin')" 
                 class="flex-1 py-2 rounded-md font-semibold text-sm transition bg-blue-600 text-white shadow">
-                Check-In (Masuk)
+                Mode Check-In (Masuk)
             </button>
             <button type="button" id="btnCheckout" onclick="switchMode('checkout')" 
                 class="flex-1 py-2 rounded-md font-semibold text-sm transition text-gray-600">
-                Check-Out (Keluar)
+                Mode Check-Out (Keluar)
             </button>
         </div>
 
@@ -114,7 +114,7 @@
 
     </div>
 
-    <!-- Script Logika OCR Lanjutan -->
+    <!-- Script Logika OCR & Aplikasi -->
     <script>
         // ⚠️ Ganti dengan URL Web App Google Apps Script kamu!
         const SCRIPT_URL = "https://script.googleusercontent.com/macros/echo?user_content_key=AUkAhnS5dGduhyEaGVCygRWKo9oSfrVa7setfs8qoao-vZ_ODBVsNRhuNx88GOPYuwBFLSuZqTtNFlCniD0q-9pkrKlts18NgwFdDpj2MG9jbHtHAu1dwHkz9jPX6PndbJxodyq3tAX1D1HOSV991kZsDk6ra-rU0UBI0vaklUXdwfQhtdkRWgPHqLmFQJ9bpKQSvHof8ShFpPpjr_hCZQDxa2lfmUxYscmzXErA6DFQUSGD7rZTpD_c-vvlTC7t9KXmjmX3jsQ_rrAUAlnhkcI5ZIJPGd21SQ&lib=MBNIcXTvPE8GSR91brAW9-xz2aiC72MHv";
@@ -222,9 +222,9 @@
             document.getElementById('alamat').value = "";
         }
 
-        // --- OCR LANJUTAN DENGAN PATTERNS / REGEX (Lokal di Browser) ---
+        // --- OCR LANJUTAN DENGAN PARSING LABEL DI SAMPING ---
         async function processAdvancedOCR(imageSource) {
-            showAlert("Memindai kartu dan mengekstrak teks (Mohon tunggu sebentar)...", "info");
+            showAlert("Memindai kartu dan mengekstrak teks...", "info");
             const idType = document.getElementById('idType').value;
 
             try {
@@ -234,59 +234,58 @@
 
                 console.log("Full OCR Text:\n", text);
 
-                // 1. Ekstraksi Nomor Identitas (NIK / SIM)
                 let detectedNumber = "";
-                if (idType === 'KTP') {
-                    const match = text.match(/\d{16}/);
-                    if (match) detectedNumber = match[0];
-                } else {
-                    const match = text.match(/\d{10,14}/);
-                    if (match) {
-                        detectedNumber = match[0];
-                    } else {
-                        const numbersOnly = text.replace(/[^0-9]/g, '');
-                        if (numbersOnly.length >= 6) detectedNumber = numbersOnly.substring(0, 16);
-                    }
-                }
-                if (detectedNumber) {
-                    document.getElementById('nik').value = detectedNumber;
-                }
-
-                // 2. Ekstraksi Nama & Alamat Berdasarkan Label Baris Teks (Heuristik)
                 let detectedName = "";
                 let detectedAddress = "";
 
+                // Parsing baris per baris untuk mencocokkan label dan data di sampingnya
                 for (let i = 0; i < lines.length; i++) {
                     let lineText = lines[i].text.trim();
                     let upperLine = lineText.toUpperCase();
 
-                    // Mencari baris yang berada setelah kata kunci "Nama"
-                    if ((upperLine.includes("NAMA") || upperLine.includes("NA.MA")) && i + 1 < lines.length) {
-                        let nextLine = lines[i + 1].text.trim();
-                        // Bersihkan dari sisa label titik dua (misal ": Budi Santoso")
-                        detectedName = nextLine.replace(/^[:;.\s]+/, '');
+                    // 1. Deteksi NIK / Nomor Identitas
+                    if (idType === 'KTP' && /\d{16}/.test(lineText)) {
+                        const match = lineText.match(/\d{16}/);
+                        if (match) detectedNumber = match[0];
                     }
 
-                    // Mencari baris yang berada setelah kata kunci "Alamat"
-                    if ((upperLine.includes("ALAMAT") || upperLine.includes("ALA.MAT")) && i + 1 < lines.length) {
-                        let nextLine = lines[i + 1].text.trim();
-                        detectedAddress = nextLine.replace(/^[:;.\s]+/, '');
+                    // 2. Deteksi Nama (Mencari teks setelah tanda ':' atau di baris bawahnya)
+                    if (upperLine.includes("NAMA")) {
+                        let parts = lineText.split(/[:|]/);
+                        if (parts.length > 1 && parts[1].trim().length > 2) {
+                            detectedName = parts[1].trim();
+                        } else if (i + 1 < lines.length) {
+                            detectedName = lines[i + 1].text.trim().replace(/^[:;.\s]+/, '');
+                        }
+                    }
+
+                    // 3. Deteksi Alamat
+                    if (upperLine.includes("ALAMAT")) {
+                        let parts = lineText.split(/[:|]/);
+                        if (parts.length > 1 && parts[1].trim().length > 3) {
+                            detectedAddress = parts[1].trim();
+                        } else if (i + 1 < lines.length) {
+                            detectedAddress = lines[i + 1].text.trim().replace(/^[:;.\s]+/, '');
+                        }
                     }
                 }
 
-                // Masukkan hasil ekstraksi ke form jika ditemukan
-                if (detectedName && detectedName.length > 2) {
-                    document.getElementById('nama').value = detectedName;
-                }
-                if (detectedAddress && detectedAddress.length > 3) {
-                    document.getElementById('alamat').value = detectedAddress;
+                // Fallback pencarian global NIK jika belum tertangkap baris spesifik
+                if (!detectedNumber) {
+                    const matchGlobal = text.match(/\d{16}/);
+                    if (matchGlobal) detectedNumber = matchGlobal[0];
                 }
 
-                showAlert("Pemindaian selesai! Silakan periksa atau sesuaikan data jika ada yang kurang pas.", "success");
+                // Masukkan hasil ke form input HTML
+                if (detectedNumber) document.getElementById('nik').value = detectedNumber;
+                if (detectedName) document.getElementById('nama').value = detectedName;
+                if (detectedAddress) document.getElementById('alamat').value = detectedAddress;
+
+                showAlert("Ekstraksi data selesai! Silakan periksa kembali.", "success");
 
             } catch (error) {
                 console.error("OCR Error:", error);
-                showAlert("Gagal membaca teks dari gambar. Silakan isi form secara manual.", "error");
+                showAlert("Gagal membaca teks. Silakan isi form secara manual.", "error");
             }
         }
 
